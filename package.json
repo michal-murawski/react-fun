@@ -7,6 +7,7 @@
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
+        "lint:types": "tsc --noEmit -p tsconfig.json",
         "pretty": "prettier --write **/*.{js,jsx,ts,tsx,json,md,css}",
         "prepare": "is-ci || husky install"
     },
@@ -24,10 +25,13 @@
         "react": "18.2.0",
         "react-dom": "18.2.0",
         "react-is": "18.2.0",
+        "stream-chain": "^2.2.5",
+        "stream-json": "^1.7.5",
         "typescript": "5.0.2"
     },
     "devDependencies": {
         "@types/react": "18.0.28",
+        "@types/stream-json": "^1.7.3",
         "@types/styled-components": "5.1.26",
         "autoprefixer": "10.4.14",
         "eslint-config-prettier": "8.8.0",

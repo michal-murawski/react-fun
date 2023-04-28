@@ -2,9 +2,9 @@ const path = require('path');
 
 module.exports = {
     // Type check TypeScript files
-    '**/*.(ts|tsx)': () => 'tsc --noEmit',
+    '*.{ts,tsx}': () => 'tsc -p tsconfig.json --noEmit',
 
-    '*.(json|md)': (filenames) => {
+    '*.{json,md}': (filenames) => {
         const filesString = filenames.join(' ');
 
         return [`prettier --write ${filesString}`];

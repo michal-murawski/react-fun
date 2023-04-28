@@ -11,7 +11,23 @@ const Footer = () => {
                                 href="/"
                                 className="mr-4 hover:underline md:mr-6 "
                             >
-                                About
+                                Home
+                            </Link>
+                        </li>
+                        <li>
+                            <Link
+                                href="/autocomplete"
+                                className="mr-4 hover:underline md:mr-6 "
+                            >
+                                Autocomplete
+                            </Link>
+                        </li>
+                        <li>
+                            <Link
+                                href="/answers"
+                                className="mr-4 hover:underline md:mr-6 "
+                            >
+                                Answers
                             </Link>
                         </li>
                     </ul>
