@@ -1,4 +1,5 @@
 import '../styles/global.css';
+
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { Providers } from '@/modules/app/Providers';
@@ -14,7 +15,7 @@ function App({ Component, pageProps }: AppProps) {
             <Providers>
                 <div className="flex h-screen flex-col">
                     <Header />
-                    <div className="flex-1 p-3">
+                    <div className="mx-auto flex w-full max-w-screen-xl flex-1 justify-center p-3">
                         <Component {...pageProps} />
                     </div>
                     <Footer />

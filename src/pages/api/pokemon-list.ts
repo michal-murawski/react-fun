@@ -5,46 +5,32 @@ import { parser } from 'stream-json';
 import { chain } from 'stream-chain';
 import { streamArray } from 'stream-json/streamers/StreamArray';
 
-export interface Pokemon {
-    id: number;
-    name: string;
-    type: string[];
-    base: Base;
-}
-
-export interface Base {
-    HP: number;
-    Attack: number;
-    Defense: number;
-    'Sp. Attack': number;
-    'Sp. Defense': number;
-    Speed: number;
-}
+// Data and interfaces are copy-pasted some random source on the GitHub
 
 async function pokemonList(request: NextApiRequest, response: NextApiResponse) {
-    const {
-        query: { search },
-    } = request;
-    const result: Pokemon[] = [];
+    const query = request.query as PokemonListRequestParams;
+    const result: PokemonListResponseDTO = [];
 
-    if (Array.isArray(search)) {
+    if (Array.isArray(query.search)) {
         return response
             .status(400)
             .json({ error: 'Search query must be a string' });
     }
 
     // Just a quick and dirty search, we assume happy path and don't check for errors
-    await new Promise((resolve, reject) => {
+    await new Promise((resolve) => {
         const dbDir = path.join(process.cwd(), 'src/db');
         const searchStream = chain([
             fs.createReadStream(dbDir + '/pokemonList.json'),
             parser(),
             streamArray(),
-            (data: { value: Pokemon }) => {
-                if (!search) return data.value;
+            (data: { value: PokemonDTO }) => {
+                if (!query.search) return data.value;
 
                 if (
-                    data.value.name.toLowerCase().includes(search.toLowerCase())
+                    data.value.name
+                        .toLowerCase()
+                        .includes(query.search.toLowerCase())
                 ) {
                     return data.value;
                 }
@@ -53,7 +39,7 @@ async function pokemonList(request: NextApiRequest, response: NextApiResponse) {
             },
         ]);
 
-        searchStream.on('data', (data: Pokemon) => {
+        searchStream.on('data', (data: PokemonDTO) => {
             result.push(data);
         });
 
