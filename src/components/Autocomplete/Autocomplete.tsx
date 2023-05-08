@@ -1,8 +1,10 @@
 import {
     ChangeEvent,
     ForwardedRef,
+    Key,
     KeyboardEvent,
     ReactNode,
+    useCallback,
     useEffect,
     useImperativeHandle,
     useRef,
@@ -29,17 +31,19 @@ type AutocompleteProps<V = string, M extends boolean = false> = {
     // Otherwise, I would need to make more checks.
     getValueCompare: (value: V) => string | boolean | number | undefined | null;
     getInputValue: (value: V) => string;
+    getOptionKey?: (option: Option<V>) => Key;
     value?: Value<V>;
     label?: ReactNode;
     placeholder?: string;
     searchEmptyText?: string;
     defaultOptions?: Option<V>[];
-    debounceTimeout?: number;
+    delay?: number;
     width?: string | number;
     highlight?: boolean;
     // Adding multiple is possible, but it would add up a lot of extra code.
     // I had first initially implemented some portion of it (generic types, option clicks), but I decided to remove it to keep the code simpler.
     multiple?: M;
+    allowClear?: boolean;
     searchEmpty?: boolean;
     closeOnSelect?: boolean;
     onSelect?: (value: Value<V> | undefined) => void;
@@ -49,10 +53,12 @@ type AutocompleteProps<V = string, M extends boolean = false> = {
 const defaultProps: Partial<AutocompleteProps> = {
     multiple: false,
     searchEmpty: false,
-    defaultOptions: undefined,
     closeOnSelect: true,
-    searchEmptyText: 'No results found',
     highlight: true,
+    allowClear: true,
+    searchEmptyText: 'No results found',
+    delay: 500,
+    defaultOptions: undefined,
 };
 
 const KeyCode = {
@@ -88,27 +94,44 @@ const AutocompleteInner = <V, M extends boolean = false>(
         onLoadOptionsAsync,
         getValueCompare,
         getInputValue,
+        getOptionKey,
         searchEmptyText,
         width,
-        debounceTimeout,
+        delay,
+        allowClear,
     } = props;
     const optionsContainerRef = useRef<HTMLDivElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
-    const [focused, setFocused] = useState(false);
+    const debounceTimeoutIdRef = useRef<NodeJS.Timeout>();
     const [innerValue, setInnerValue] = useState<Value<V> | undefined>(value);
     const [innerOptions, setInnerOptions] = useState<Option<V>[] | undefined>(
         defaultOptions,
     );
-    const [searchValue, setSearchValue] = useState<string>('');
+    const [search, setSearch] = useState<string>('');
+    const [prevSearch, setPrevSearch] = useState<string | undefined>();
     const [highlightedOptionIndex, setHighlightedOptionIndex] = useState(0);
     const [loading, setLoading] = useState(false);
     const [open, setOpen] = useState(false);
 
     useImperativeHandle(ref, () => inputRef.current as HTMLInputElement);
 
+    // Listen to value changes from outside
     useEffect(() => {
-        if (!searchValue && !searchEmpty) {
+        setInnerValue(value);
+
+        if (value) {
+            setSearch(getInputValue(value?.value));
+        } else {
+            setSearch('');
+        }
+
+        // We only care about the value
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [value]);
+
+    useEffect(() => {
+        if (!search && !searchEmpty) {
             setLoading(false);
             setInnerOptions(defaultOptions);
             setHighlightedOptionIndex(0);
@@ -122,29 +145,41 @@ const AutocompleteInner = <V, M extends boolean = false>(
 
         setLoading(true);
 
-        onLoadOptionsAsync(searchValue)
-            .then((options) => {
-                setInnerOptions(options);
-                setLoading(false);
+        if (debounceTimeoutIdRef.current) {
+            clearTimeout(debounceTimeoutIdRef.current);
+        }
 
-                if (highlightedOptionIndex >= options.length) {
-                    setHighlightedOptionIndex(
-                        options.length ? options.length - 1 : 0,
-                    );
-                }
-            })
-            .catch(() => {
-                // We should handle errors here, simply log it for now, as no time for more
-                setLoading(false);
-                setInnerOptions(undefined);
-            });
+        debounceTimeoutIdRef.current = setTimeout(() => {
+            onLoadOptionsAsync(search)
+                .then((options) => {
+                    setInnerOptions(options);
+                    setLoading(false);
 
+                    if (highlightedOptionIndex >= options.length) {
+                        setHighlightedOptionIndex(
+                            options.length ? options.length - 1 : 0,
+                        );
+                    }
+                })
+                .catch(() => {
+                    // We should handle errors here, simply log it for now, as no time for more
+                    setLoading(false);
+                    setInnerOptions(undefined);
+                });
+        }, delay);
+
+        return () => {
+            clearTimeout(debounceTimeoutIdRef.current);
+        };
         // We only care about the search value, not the other dependencies
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [onLoadOptionsAsync, searchValue, open]);
+    }, [onLoadOptionsAsync, searchEmpty, search]);
 
+    // Why not "onBlur" on input?
+    // Because we need to handle the case when the user clicks on an option
+    // and the input loses focus before the option is selected
     useEffect(() => {
-        const detectOutOfEventTargetClick = (event: MouseEvent) => {
+        const detectOutOfContainerClick = (event: MouseEvent) => {
             if (!containerRef.current) {
                 return;
             }
@@ -153,19 +188,20 @@ const AutocompleteInner = <V, M extends boolean = false>(
                 return;
             }
 
-            setOpen(false);
-            setFocused(false);
+            handleAutocompleteExit();
         };
 
-        document.addEventListener('click', detectOutOfEventTargetClick, true);
+        document.addEventListener('click', detectOutOfContainerClick, true);
 
         return function cleanup() {
             document.removeEventListener(
                 'click',
-                detectOutOfEventTargetClick,
+                detectOutOfContainerClick,
                 true,
             );
         };
+        // Only on mount
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Manage scroll while navigating with keyboard
@@ -183,23 +219,42 @@ const AutocompleteInner = <V, M extends boolean = false>(
 
         if (!isVisibleInContainer(child, optionsContainerRef.current)) {
             child.scrollIntoView({
-                behavior: 'smooth',
+                behavior: 'auto',
             });
         }
     }, [highlightedOptionIndex]);
 
-    function isSelectedOption(option: Option<V>, value?: Value<V>): boolean {
-        if (!value) {
-            return false;
-        }
+    const isEqualOption = useCallback(
+        (option: Option<V>, value?: Value<V>): boolean => {
+            if (!value) {
+                return false;
+            }
 
-        return getValueCompare(value?.value) === getValueCompare(option.value);
+            return (
+                getValueCompare(value?.value) === getValueCompare(option.value)
+            );
+        },
+        // Only on mount
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [],
+    );
+
+    function handleAutocompleteExit() {
+        setOpen(false);
+
+        if (prevSearch) {
+            setSearch(prevSearch);
+            setPrevSearch(undefined);
+        }
     }
 
     function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
         if (event.code === KeyCode.ArrowDown) {
             event.preventDefault();
 
+            if (!open) {
+                setOpen(true);
+            }
             if (
                 innerOptions &&
                 highlightedOptionIndex < innerOptions?.length - 1
@@ -215,30 +270,29 @@ const AutocompleteInner = <V, M extends boolean = false>(
         } else if (event.code === KeyCode.Enter && innerOptions) {
             event.preventDefault();
 
-            handleOptionSelect(innerOptions[highlightedOptionIndex]);
+            if (innerOptions.length > 0) {
+                handleOptionSelect(innerOptions[highlightedOptionIndex]);
+            }
         } else if (event.code === KeyCode.Escape) {
             event.preventDefault();
 
-            setOpen(false);
-            setSearchValue('');
             inputRef.current?.blur();
+            handleAutocompleteExit();
         }
     }
 
     function handleInputChange(event: ChangeEvent<HTMLInputElement>) {
-        setSearchValue(event.target.value);
+        setSearch(event.target.value);
     }
 
     function handleOptionSelect(clickedOption: Option<V>) {
-        const newValue =
-            innerValue?.value &&
-            getValueCompare(innerValue?.value) ===
-                getValueCompare(clickedOption.value)
-                ? undefined
-                : clickedOption;
+        const isAlreadySelected = isEqualOption(clickedOption, innerValue);
+        const newValue = isAlreadySelected ? undefined : clickedOption;
+        const newSearch = newValue ? getInputValue(newValue.value) : '';
 
         setInnerValue(newValue);
-        setSearchValue(newValue ? getInputValue(newValue.value) : '');
+        setPrevSearch(newSearch);
+        setSearch(newSearch);
 
         if (onSelect) {
             onSelect(newValue);
@@ -247,18 +301,16 @@ const AutocompleteInner = <V, M extends boolean = false>(
         if (closeOnSelect) {
             setOpen(false);
         }
-
-        inputRef.current?.blur();
     }
 
     function handleFocus() {
         setOpen(true);
-        setFocused(true);
+        setPrevSearch(search);
     }
 
     function handleClearValue() {
         setInnerValue(undefined);
-        setSearchValue('');
+        setSearch('');
 
         if (onSelect) {
             onSelect(undefined);
@@ -284,22 +336,23 @@ const AutocompleteInner = <V, M extends boolean = false>(
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                     <SearchIcon />
                 </div>
-
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-                    {loading && <LoadingIcon />}
-                </div>
+                {loading && (
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-9">
+                        <LoadingIcon />
+                    </div>
+                )}
                 <input
                     name={name}
                     autoComplete="off"
                     ref={inputRef}
-                    value={searchValue}
+                    value={search}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
                     onFocus={handleFocus}
                     className="block w-full rounded-lg border border-gray-300 bg-gray-50 p-4 pl-10 pr-10 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:focus:border-blue-500 dark:focus:ring-blue-500"
                     placeholder={placeholder}
                 />
-                {innerValue && (
+                {innerValue && allowClear && (
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                         <button
                             type="button"
@@ -310,29 +363,29 @@ const AutocompleteInner = <V, M extends boolean = false>(
                         </button>
                     </div>
                 )}
-
                 {open && (
                     <div
                         ref={optionsContainerRef}
                         className="absolute z-10 mt-1 max-h-72 w-full overflow-y-auto rounded-md bg-white shadow-lg dark:bg-gray-800"
                     >
-                        {innerOptions?.length === 0 && searchValue && (
+                        {innerOptions?.length === 0 && search && (
                             <div className="relative cursor-pointer select-none py-2 pl-3 pr-9 text-gray-900 transition-all dark:text-white">
                                 {searchEmptyText}
                             </div>
                         )}
                         {innerOptions?.map((option, index) => (
                             <Option
-                                key={index}
-                                option={option}
+                                key={
+                                    getOptionKey ? getOptionKey(option) : index
+                                }
+                                label={option.label}
                                 highlight={highlight}
-                                searchValue={searchValue}
+                                searchValue={search}
                                 isHovered={index === highlightedOptionIndex}
-                                isSelected={isSelectedOption(
-                                    option,
-                                    innerValue,
-                                )}
-                                onClick={() => handleOptionSelect(option)}
+                                isSelected={isEqualOption(option, innerValue)}
+                                onClick={() => {
+                                    handleOptionSelect(option);
+                                }}
                                 onMouseEnter={() => {
                                     setHighlightedOptionIndex(index);
                                 }}

@@ -2,7 +2,7 @@ import classNames from 'classnames';
 import type { Option as OptionType } from '@/components/Autocomplete/Autocomplete';
 
 interface OptionProps<V> {
-    option: OptionType<V>;
+    label: string;
     isHovered: boolean;
     isSelected: boolean;
     highlight?: boolean;
@@ -11,11 +11,11 @@ interface OptionProps<V> {
     onMouseEnter?: () => void;
 }
 
-function getHighlightedLabel(label: string, searchValue?: string) {
+function highlightMatchingLabel(label: string, searchValue?: string) {
     if (!searchValue) return label;
 
     // Painful for the performance
-    // Consider using string methods instead of regex
+    // Consider using string methods instead of regex, benchmark it
     const labelParts = label.split(new RegExp(`(${searchValue})`, 'ig'));
 
     return labelParts.map((part, index) => (
@@ -30,7 +30,7 @@ function getHighlightedLabel(label: string, searchValue?: string) {
 }
 
 function Option<V>({
-    option,
+    label,
     highlight,
     searchValue,
     isHovered,
@@ -50,11 +50,10 @@ function Option<V>({
             onClick={onClick}
             onMouseEnter={onMouseEnter}
         >
-            {highlight
-                ? getHighlightedLabel(option.label, searchValue)
-                : option.label}
+            {highlight ? highlightMatchingLabel(label, searchValue) : label}
         </div>
     );
 }
 
 export { Option };
+export type { OptionProps };

@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { Autocomplete, Option } from '@/components/Autocomplete/Autocomplete';
+import {
+    Autocomplete,
+    type Option,
+} from '@/components/Autocomplete/Autocomplete';
 
 const searchPokemonOptions = async (
     search?: string,
@@ -53,7 +56,6 @@ function AutocompletePage() {
                     value={value}
                     onSelect={(value) => {
                         setValue(value);
-                        console.log('SELECTED', value);
                     }}
                     onLoadOptionsAsync={searchPokemonOptions}
                     /**
@@ -62,13 +64,29 @@ function AutocompletePage() {
 
                     // debounceTimeout={2000}
                     // defaultOptions={defaultOptions}
-                    // searchEmpty={false}
+                    // searchEmpty={true}
                     // closeOnSelect={true}
                     // searchEmptyText="No pokemon found my friend"
-                    // width={100}
-                    highlight={false}
+                    // width={300}
+                    // highlight={false}
                 />
             </div>
+            <button
+                className="m-5 mt-6 rounded bg-blue-500 py-2 px-4 font-bold text-white hover:bg-blue-700"
+                onClick={() => {
+                    setValue(defaultOptions[0]);
+                }}
+            >
+                Set default value
+            </button>
+            <button
+                className="mt-6 rounded bg-blue-500 py-2 px-4 font-bold text-white hover:bg-blue-700"
+                onClick={() => {
+                    setValue(undefined);
+                }}
+            >
+                Clear value
+            </button>
             <br />
             <br />
             <br />
