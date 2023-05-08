@@ -24,10 +24,10 @@ const Footer = () => {
                         </li>
                         <li>
                             <Link
-                                href="/answers"
+                                href="/questions"
                                 className="mr-4 hover:underline md:mr-6 "
                             >
-                                Answers
+                                Questions
                             </Link>
                         </li>
                     </ul>

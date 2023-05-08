@@ -270,7 +270,7 @@ const AutocompleteInner = <V, M extends boolean = false>(
         } else if (event.code === KeyCode.Enter && innerOptions) {
             event.preventDefault();
 
-            if (innerOptions.length > 0) {
+            if (innerOptions.length > 0 && open) {
                 handleOptionSelect(innerOptions[highlightedOptionIndex]);
             }
         } else if (event.code === KeyCode.Escape) {

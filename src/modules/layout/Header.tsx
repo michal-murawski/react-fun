@@ -51,11 +51,11 @@ const Header = () => {
                             </li>
                             <li>
                                 <ActiveLink
-                                    href="/answers"
+                                    href="/questions"
                                     className={linkClasses}
                                     activeClassName="text-white"
                                 >
-                                    Answers
+                                    Questions
                                 </ActiveLink>
                             </li>
                         </ul>
