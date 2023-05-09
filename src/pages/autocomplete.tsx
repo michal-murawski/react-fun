@@ -66,7 +66,7 @@ function AutocompletePage() {
                     // defaultOptions={defaultOptions}
                     // searchEmpty={true}
                     // closeOnSelect={true}
-                    // searchEmptyText="No pokemon found my friend"
+                    // emptyResultText="No pokemon found my friend"
                     // width={300}
                     // highlight={false}
                 />

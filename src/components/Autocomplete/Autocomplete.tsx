@@ -34,9 +34,9 @@ type AutocompleteProps<V = string, M extends boolean = false> = {
     getOptionKey?: (option: Option<V>) => Key;
     value?: Value<V>;
     label?: ReactNode;
-    placeholder?: string;
-    searchEmptyText?: string;
     defaultOptions?: Option<V>[];
+    placeholder?: string;
+    emptyResultText?: string;
     delay?: number;
     width?: string | number;
     highlight?: boolean;
@@ -56,7 +56,7 @@ const defaultProps: Partial<AutocompleteProps> = {
     closeOnSelect: true,
     highlight: true,
     allowClear: true,
-    searchEmptyText: 'No results found',
+    emptyResultText: 'No results found',
     delay: 500,
     defaultOptions: undefined,
 };
@@ -66,7 +66,7 @@ const KeyCode = {
     ArrowUp: 'ArrowUp',
     Enter: 'Enter',
     Escape: 'Escape',
-};
+} as const;
 
 /**
  * There could be many ways to implement an autocomplete component with async method for loading options.
@@ -95,7 +95,7 @@ const AutocompleteInner = <V, M extends boolean = false>(
         getValueCompare,
         getInputValue,
         getOptionKey,
-        searchEmptyText,
+        emptyResultText,
         width,
         delay,
         allowClear,
@@ -180,22 +180,19 @@ const AutocompleteInner = <V, M extends boolean = false>(
     // and the input loses focus before the option is selected
     useEffect(() => {
         const detectOutOfContainerClick = (event: MouseEvent) => {
-            if (!containerRef.current) {
-                return;
+            if (
+                containerRef.current &&
+                !containerRef.current.contains(event.target as Node)
+            ) {
+                handleAutocompleteExit();
             }
-
-            if (containerRef.current.contains(event.target as Node)) {
-                return;
-            }
-
-            handleAutocompleteExit();
         };
 
-        document.addEventListener('click', detectOutOfContainerClick, true);
+        document.addEventListener('mousedown', detectOutOfContainerClick, true);
 
         return function cleanup() {
             document.removeEventListener(
-                'click',
+                'mousedown',
                 detectOutOfContainerClick,
                 true,
             );
@@ -239,13 +236,10 @@ const AutocompleteInner = <V, M extends boolean = false>(
         [],
     );
 
+    console.log('render open', open);
+
     function handleAutocompleteExit() {
         setOpen(false);
-
-        if (prevSearch) {
-            setSearch(prevSearch);
-            setPrevSearch(undefined);
-        }
     }
 
     function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -282,7 +276,26 @@ const AutocompleteInner = <V, M extends boolean = false>(
     }
 
     function handleInputChange(event: ChangeEvent<HTMLInputElement>) {
+        if (!open) {
+            setOpen(true);
+        }
+
         setSearch(event.target.value);
+    }
+
+    function handleInputBlur() {
+        if (prevSearch && innerValue) {
+            setSearch(prevSearch);
+            setPrevSearch(undefined);
+        } else {
+            setSearch('');
+            setPrevSearch(undefined);
+        }
+    }
+
+    function handleInputFocus() {
+        setOpen(true);
+        setPrevSearch(search);
     }
 
     function handleOptionSelect(clickedOption: Option<V>) {
@@ -303,11 +316,6 @@ const AutocompleteInner = <V, M extends boolean = false>(
         }
     }
 
-    function handleFocus() {
-        setOpen(true);
-        setPrevSearch(search);
-    }
-
     function handleClearValue() {
         setInnerValue(undefined);
         setSearch('');
@@ -320,11 +328,17 @@ const AutocompleteInner = <V, M extends boolean = false>(
         setOpen(true);
     }
 
+    const showClearButton = innerValue && allowClear;
+    const showOptions = open && !loading;
+    const showLoader = open && loading;
+    const containerStyles = width ? { width } : {};
+    const showEmptyResult = innerOptions?.length === 0 && search;
+
     return (
         <div
             className="relative flex flex-col"
             ref={containerRef}
-            style={width ? { width } : {}}
+            style={containerStyles}
         >
             <label
                 htmlFor={name}
@@ -336,7 +350,7 @@ const AutocompleteInner = <V, M extends boolean = false>(
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                     <SearchIcon />
                 </div>
-                {loading && (
+                {showLoader && (
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-9">
                         <LoadingIcon />
                     </div>
@@ -348,11 +362,12 @@ const AutocompleteInner = <V, M extends boolean = false>(
                     value={search}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
-                    onFocus={handleFocus}
+                    onFocus={handleInputFocus}
+                    onBlur={handleInputBlur}
                     className="block w-full rounded-lg border border-gray-300 bg-gray-50 p-4 pl-10 pr-10 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:focus:border-blue-500 dark:focus:ring-blue-500"
                     placeholder={placeholder}
                 />
-                {innerValue && allowClear && (
+                {showClearButton && (
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                         <button
                             type="button"
@@ -363,14 +378,14 @@ const AutocompleteInner = <V, M extends boolean = false>(
                         </button>
                     </div>
                 )}
-                {open && (
+                {showOptions && (
                     <div
                         ref={optionsContainerRef}
                         className="absolute z-10 mt-1 max-h-72 w-full overflow-y-auto rounded-md bg-white shadow-lg dark:bg-gray-800"
                     >
-                        {innerOptions?.length === 0 && search && (
+                        {showEmptyResult && (
                             <div className="relative cursor-pointer select-none py-2 pl-3 pr-9 text-gray-900 transition-all dark:text-white">
-                                {searchEmptyText}
+                                {emptyResultText}
                             </div>
                         )}
                         {innerOptions?.map((option, index) => (
